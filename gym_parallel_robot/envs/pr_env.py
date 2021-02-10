@@ -6,16 +6,16 @@ class PREnv(gym.Env):
     metadata = {'render.modes': ['human']}
 
     def __init__(self):
-        raise NotImplementedError
+        print("Env initialized")
 
     def step(self, action):
-        raise NotImplementedError
+        print("Step Success")
 
     def reset(self):
-        raise NotImplementedError
+        print("Env reset")
 
     def render(self):
-        raise NotImplementedError
+        print("Env rendered")
 
     def close(self):
-        raise NotImplementedError
+        print("Env closed")
