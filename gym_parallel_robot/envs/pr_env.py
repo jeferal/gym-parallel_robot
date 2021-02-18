@@ -20,6 +20,16 @@ class PREnv(gym.Env):
 
     def __init__(self):
         print("Env initialized")
+        #define spaces
+        low_action = np.array([0.0, 0.0, 0.0, 0.0])
+        high_action = np.array([9.5, 9.5, 9.5, 9.5])
+
+        high_obs = np.array([np.inf, np.inf, np.inf, np.inf, np.inf, np.inf, np.inf, np.inf])
+        low_obs = -high_obs
+
+        self.action_space = spaces.Box(low_action, high_action, shape=(4,))
+        self.observation_space = spaces.Box(low_obs, high_obs, shape=(8,))
+        self.reward_range = (-np.inf, 0)
 
         #create ROS2 node
         rclpy.init(args=None)
@@ -96,7 +106,7 @@ class PREnv(gym.Env):
             "pr": 'parallel_robot'
             }
 
-        return (obs_, reward, done, info)
+        return (obs_.resize(8), reward, done, info)
 
     def reset(self):
         #start simulink thread
@@ -121,7 +131,9 @@ class PREnv(gym.Env):
         print("simulation started")
         self.obs = np.array([[0.695245, 0.691370, 0.693736, 0.654154],
                             [0.0, 0.0, 0.0, 0.0]])
-        return self.obs
+        obs = self.obs
+        print(obs)
+        return obs.resize(8)
 
     def render(self):
         print("Env rendered")
@@ -137,6 +149,8 @@ class PREnv(gym.Env):
         self.time_obs_ns = msg.current_time.nanosec
 
     def _set_action(self, action):
+        print(action)
+        print(type(action))
         msg = PRArrayH()
         msg.current_time = self.node.get_clock().now().to_msg()
         msg.data = action
