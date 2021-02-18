@@ -28,7 +28,7 @@ class PREnv(gym.Env):
         #initialize variables
         self.obs = np.array([[0.695245, 0.691370, 0.693736, 0.654154],
                             [0.0, 0.0, 0.0, 0.0]])
-        self.target_position = np.array([0.8, 0.8, 0.8, 0.8])
+        self.target_position = np.array([0.830578, 0.847096, 0.831132, 0.792133])
         self.status = "starting"
         self.time_obs_ns = 0
         self.time_obs_ns_ = self.time_obs_ns
@@ -42,6 +42,11 @@ class PREnv(gym.Env):
             PRState, 
             'pr_state',
             self._state_callback, 
+            1)
+        
+        self.publisher_reset_vel = self.node.create_publisher(
+            Bool,
+            'der_reset',
             1)
 
         sim_qos = QoSProfile(depth=1)
@@ -82,7 +87,7 @@ class PREnv(gym.Env):
         #check if done
         if self.status == 'all_clear' or self.status == 'error_sim':
             done = True
-            print('DONEEEEEEE')
+            reward = -1000
         else:
             done = False
 
@@ -97,6 +102,10 @@ class PREnv(gym.Env):
         #start simulink thread
         self.status = "waiting for simulation"
 
+        reset_msg = Bool()
+        reset_msg.data = True
+        self.publisher_reset_vel.publish(reset_msg)
+
         #send signal and wait for response
         while self.status != 'starting_simulation':
             msg = Bool()
@@ -105,8 +114,8 @@ class PREnv(gym.Env):
             self.publisher_start_.publish(msg)
 
         #wait for simulink
-        print('waiting for simulink')
         while self.status != 'running':
+            print('waiting for simulink')
             rclpy.spin_once(self.node, timeout_sec=1)
 
         print("simulation started")
@@ -141,21 +150,18 @@ class PREnv(gym.Env):
         #Sping until a new observation (with a different time stamp)
         while self.time_obs_ns == self.time_obs_ns_:
             rclpy.spin_once(self.node)
-            print(self.time_obs_ns)
-            print(self.time_obs_ns_)
             if self.status == 'all_clear' or self.status == 'error_sim':
                 break
 
+        print(self.time_obs_ns)
         self.time_obs_ns_ = self.time_obs_ns
         return self.obs
 
     def _calculate_reward(self, target, pos):
         reward = - np.square(np.subtract(target, pos)).sum()
-        print(reward)
         return reward
     
     def _sim_callback(self, msg):
-        print('sim callback')
         self.status = "running"
 
     def _end_callback(self, msg):
