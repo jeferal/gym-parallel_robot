@@ -21,14 +21,25 @@ class PREnv(gym.Env):
     def __init__(self):
         print("Env initialized")
         #define spaces
-        low_action = np.array([0.0, 0.0, 0.0, 0.0])
-        high_action = np.array([9.5, 9.5, 9.5, 9.5])
+        self.max_v = 9.5
+        self.min_v = 0.0
+        self.max_obs = np.inf
+        self.min_obs = -np.inf
 
-        high_obs = np.array([np.inf, np.inf, np.inf, np.inf, np.inf, np.inf, np.inf, np.inf])
-        low_obs = -high_obs
+        self.action_space = spaces.Box(
+            self.min_v, 
+            self.max_v, 
+            shape=(4,),
+            dtype=np.float32
+        )
 
-        self.action_space = spaces.Box(low_action, high_action, shape=(4,))
-        self.observation_space = spaces.Box(low_obs, high_obs, shape=(8,))
+        self.observation_space = spaces.Box(
+            self.min_obs, 
+            self.max_obs, 
+            shape=(8,),
+            dtype=np.float32
+        )
+        
         self.reward_range = (-np.inf, 0)
 
         #create ROS2 node
@@ -84,15 +95,21 @@ class PREnv(gym.Env):
 
         start = input('Press any key to start')
 
+        self.seed()
+
     def step(self, action):
         #set action
+        print('STEP FUNCTION')
+        print(action)
         self._set_action(action)
 
         #get observation
-        obs_ = self._get_obs()
+        observation = self._get_obs()
+        obs_ = np.array([observation[0,0], observation[0,1], observation[0,2], observation[0,3],
+                         observation[1,0], observation[1,1], observation[1,2], observation[1,3]])
 
         #calculate reward
-        reward = self._calculate_reward(self.target_position, obs_)
+        reward = self._calculate_reward(self.target_position, obs_[0:4])
 
         #check if done
         if self.status == 'all_clear' or self.status == 'error_sim':
@@ -105,8 +122,10 @@ class PREnv(gym.Env):
         info = {
             "pr": 'parallel_robot'
             }
+        print('Step obs')
+        print(obs_)
 
-        return (obs_.resize(8), reward, done, info)
+        return (obs_, reward, done, info)
 
     def reset(self):
         #start simulink thread
@@ -129,11 +148,10 @@ class PREnv(gym.Env):
             rclpy.spin_once(self.node, timeout_sec=1)
 
         print("simulation started")
-        self.obs = np.array([[0.695245, 0.691370, 0.693736, 0.654154],
-                            [0.0, 0.0, 0.0, 0.0]])
-        obs = self.obs
+        obs = np.array([0.695245, 0.691370, 0.693736, 0.654154,
+                        0.0, 0.0, 0.0, 0.0])
         print(obs)
-        return obs.resize(8)
+        return obs
 
     def render(self):
         print("Env rendered")
@@ -153,7 +171,10 @@ class PREnv(gym.Env):
         print(type(action))
         msg = PRArrayH()
         msg.current_time = self.node.get_clock().now().to_msg()
-        msg.data = action
+        msg.data[0] = action[0]
+        msg.data[1] = action[1]
+        msg.data[2] = action[2]
+        msg.data[3] = action[3]
         
         self.publisher_.publish(msg)
 
@@ -181,3 +202,7 @@ class PREnv(gym.Env):
     def _end_callback(self, msg):
         self.status = msg.data
         print(self.status)
+
+    def seed(self, seed=None):
+        self.np_random, seed = seeding.np_random(seed)
+        return [seed]
