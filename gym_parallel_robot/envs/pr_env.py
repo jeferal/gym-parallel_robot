@@ -26,6 +26,14 @@ class PREnv(gym.Env):
         self.max_obs = np.inf
         self.min_obs = -np.inf
 
+        self.iter = 0.0
+        self.time = 0
+        self.time_0 = 0
+
+        #Parameters Reward function
+        self.a = 100000000
+        self.b = 15
+
         self.action_space = spaces.Box(
             self.min_v, 
             self.max_v, 
@@ -99,8 +107,6 @@ class PREnv(gym.Env):
 
     def step(self, action):
         #set action
-        print('STEP FUNCTION')
-        print(action)
         self._set_action(action)
 
         #get observation
@@ -114,7 +120,11 @@ class PREnv(gym.Env):
         #check if done
         if self.status == 'all_clear' or self.status == 'error_sim':
             done = True
-            reward = -1000
+            if self.status == 'error_sim':
+                print('Reward crash: ')
+                print(self.iter)
+                print(reward)
+                reward = - self.a*(1+np.exp(-self.time/self.b))
         else:
             done = False
 
@@ -122,14 +132,16 @@ class PREnv(gym.Env):
         info = {
             "pr": 'parallel_robot'
             }
-        print('Step obs')
-        print(obs_)
 
-        return (obs_, reward, done, info)
+        self.iter = self.iter + 1.0
+        print(self.time)
+
+        return (obs_, reward/1000000.0, done, info)
 
     def reset(self):
         #start simulink thread
         self.status = "waiting for simulation"
+        self.time_0 = 0
 
         reset_msg = Bool()
         reset_msg.data = True
@@ -163,12 +175,15 @@ class PREnv(gym.Env):
 
     def _state_callback(self, msg):
         #Update obs
+        if self.time_0 == 0:
+            self.time_0 = msg.current_time.sec + msg.current_time.nanosec/1000000000
+            
         self.obs = np.array([msg.q.data, msg.q_vel.data])
         self.time_obs_ns = msg.current_time.nanosec
+        time = msg.current_time.sec + msg.current_time.nanosec/1000000000
+        self.time = time - self.time_0
 
     def _set_action(self, action):
-        print(action)
-        print(type(action))
         msg = PRArrayH()
         msg.current_time = self.node.get_clock().now().to_msg()
         msg.data[0] = action[0]
@@ -188,20 +203,19 @@ class PREnv(gym.Env):
             if self.status == 'all_clear' or self.status == 'error_sim':
                 break
 
-        print(self.time_obs_ns)
         self.time_obs_ns_ = self.time_obs_ns
         return self.obs
 
     def _calculate_reward(self, target, pos):
-        reward = - np.square(np.subtract(target, pos)).sum()
+        reward = - np.square(np.power(np.subtract(target, pos),2)).sum()
         return reward
     
     def _sim_callback(self, msg):
         self.status = "running"
 
     def _end_callback(self, msg):
-        self.status = msg.data
         print(self.status)
+        self.status = msg.data
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
