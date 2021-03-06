@@ -22,16 +22,16 @@ class PREnv(gym.Env):
         print("Env initialized")
         #define spaces
         self.max_v = 9.5
-        self.min_v = 0.0
-        self.max_obs = np.inf
-        self.min_obs = -np.inf
+        self.min_v = -9.5
+        self.max_obs = 2.0
+        self.min_obs = -2.0
 
         self.iter = 0.0
         self.time = 0
         self.time_0 = 0
 
         #Parameters Reward function
-        self.a = 100000000
+        self.a = 10000000000
         self.b = 15
 
         self.action_space = spaces.Box(
@@ -115,18 +115,30 @@ class PREnv(gym.Env):
                          observation[1,0], observation[1,1], observation[1,2], observation[1,3]])
 
         #calculate reward
-        reward = self._calculate_reward(self.target_position, obs_[0:4])
+        pos = obs_[0:4]
+        vel = obs_[4:8]
+        print(type(action))
+        print(action)
+        reward = self._calculate_reward(self.target_position, pos, vel)
 
+        done = False
         #check if done
         if self.status == 'all_clear' or self.status == 'error_sim':
             done = True
-            if self.status == 'error_sim':
-                print('Reward crash: ')
-                print(self.iter)
-                print(reward)
-                reward = - self.a*(1+np.exp(-self.time/self.b))
-        else:
-            done = False
+            print("Done = True from simulation")
+
+        if len(pos[pos>1.99]) > 0 or len(pos[pos<-1.99]) > 0:
+            done = True
+            print("Done = True from overflow")
+            self.status = 'limit_overflow'
+
+        if self.status == 'error_sim' or self.status == 'limit_overflow':
+            print('Reward crash: ')
+            print(self.iter)
+            print(reward)
+            reward = - self.a*(1+np.exp(-self.time/self.b))
+
+
 
         #create info dic
         info = {
@@ -135,8 +147,7 @@ class PREnv(gym.Env):
 
         self.iter = self.iter + 1.0
         print(self.time)
-
-        return (obs_, reward/1000000.0, done, info)
+        return (obs_, reward, done, info)
 
     def reset(self):
         #start simulink thread
@@ -206,8 +217,8 @@ class PREnv(gym.Env):
         self.time_obs_ns_ = self.time_obs_ns
         return self.obs
 
-    def _calculate_reward(self, target, pos):
-        reward = - np.square(np.power(np.subtract(target, pos),2)).sum()
+    def _calculate_reward(self, target, pos, vel):
+        reward = - (np.power(np.subtract(target, pos),2).mean() + 0.1*vel.mean())
         return reward
     
     def _sim_callback(self, msg):
