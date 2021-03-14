@@ -31,8 +31,8 @@ class PREnv(gym.Env):
         self.time_0 = 0
 
         #Parameters Reward function
-        self.a = 10000000000
-        self.b = 15
+        self.a = 1000
+        self.b = 35
 
         self.action_space = spaces.Box(
             self.min_v, 
@@ -44,7 +44,7 @@ class PREnv(gym.Env):
         self.observation_space = spaces.Box(
             self.min_obs, 
             self.max_obs, 
-            shape=(8,),
+            shape=(12,),
             dtype=np.float32
         )
         
@@ -55,9 +55,14 @@ class PREnv(gym.Env):
         self.node = rclpy.create_node("pr_env")
 
         #initialize variables
-        self.obs = np.array([[0.695245, 0.691370, 0.693736, 0.654154],
-                            [0.0, 0.0, 0.0, 0.0]])
         self.target_position = np.array([0.830578, 0.847096, 0.831132, 0.792133])
+
+        first_position = np.array([0.679005, 0.708169, 0.684298, 0.637145])
+        first_velocity = np.array([0.0, 0.0, 0.0, 0.0])
+        self.first_obs = np.concatenate((first_position, first_velocity, (self.target_position-first_position)), axis=0)
+
+        self.obs = self.first_obs
+
         self.status = "starting"
         self.time_obs_ns = 0
         self.time_obs_ns_ = self.time_obs_ns
@@ -101,36 +106,41 @@ class PREnv(gym.Env):
             self._end_callback,
             1)
 
-        start = input('Press any key to start')
-
         self.seed()
+        start = input('Press any key to start')
 
     def step(self, action):
         #set action
         self._set_action(action)
 
         #get observation
-        observation = self._get_obs()
-        obs_ = np.array([observation[0,0], observation[0,1], observation[0,2], observation[0,3],
-                         observation[1,0], observation[1,1], observation[1,2], observation[1,3]])
+        obs_ = self._get_obs()
 
         #calculate reward
         pos = obs_[0:4]
         vel = obs_[4:8]
-        print(type(action))
-        print(action)
-        reward = self._calculate_reward(self.target_position, pos, vel)
+        reward = self._calculate_reward(self.target_position, pos, vel, action)
 
         done = False
         #check if done
         if self.status == 'all_clear' or self.status == 'error_sim':
             done = True
             print("Done = True from simulation")
-
+        
+        #TODO Stop when obs > 1.99
+        """
         if len(pos[pos>1.99]) > 0 or len(pos[pos<-1.99]) > 0:
             done = True
             print("Done = True from overflow")
             self.status = 'limit_overflow'
+            reward = - self.a*(1+np.exp(-self.time/self.b))
+            while self.status != 'error_sim':
+                print('waiting for finishing simulation')
+                rclpy.spin_once(self.node)
+                if self.status == 'all_clear':
+                    break
+            self.status = 'done'
+        """
 
         if self.status == 'error_sim' or self.status == 'limit_overflow':
             print('Reward crash: ')
@@ -138,49 +148,51 @@ class PREnv(gym.Env):
             print(reward)
             reward = - self.a*(1+np.exp(-self.time/self.b))
 
-
-
         #create info dic
         info = {
             "pr": 'parallel_robot'
             }
 
         self.iter = self.iter + 1.0
-        print(self.time)
         return (obs_, reward, done, info)
 
     def reset(self):
         #start simulink thread
         self.status = "waiting for simulation"
         self.time_0 = 0
+        self.iter = 0
 
+        #send signal and wait for response
+        while self.status != 'starting_simulation':
+            print('waiting for MATLAB')
+            msg = Bool()
+            msg.data = True
+            self.publisher_start_.publish(msg)
+            rclpy.spin_once(self.node, timeout_sec=1)
+        
+        #Reset velocity
         reset_msg = Bool()
         reset_msg.data = True
         self.publisher_reset_vel.publish(reset_msg)
 
-        #send signal and wait for response
-        while self.status != 'starting_simulation':
-            msg = Bool()
-            msg.data = True
-            rclpy.spin_once(self.node, timeout_sec=1)
-            self.publisher_start_.publish(msg)
-
         #wait for simulink
         while self.status != 'running':
+            msg = Bool()
+            msg.data = True
+            self.publisher_start_.publish(msg)
             print('waiting for simulink')
             rclpy.spin_once(self.node, timeout_sec=1)
 
         print("simulation started")
-        obs = np.array([0.695245, 0.691370, 0.693736, 0.654154,
-                        0.0, 0.0, 0.0, 0.0])
+        obs = self.first_obs
+
         print(obs)
         return obs
 
     def render(self):
-        print("Env rendered")
+        raise NotImplementedError
 
     def close(self):
-        print("Env closed")
         self.node.destroy_node()
         rclpy.shutdown()
 
@@ -189,7 +201,7 @@ class PREnv(gym.Env):
         if self.time_0 == 0:
             self.time_0 = msg.current_time.sec + msg.current_time.nanosec/1000000000
             
-        self.obs = np.array([msg.q.data, msg.q_vel.data])
+        self.obs = np.concatenate((msg.q.data, msg.q_vel.data, (self.target_position-msg.q.data)), axis=0)
         self.time_obs_ns = msg.current_time.nanosec
         time = msg.current_time.sec + msg.current_time.nanosec/1000000000
         self.time = time - self.time_0
@@ -217,8 +229,9 @@ class PREnv(gym.Env):
         self.time_obs_ns_ = self.time_obs_ns
         return self.obs
 
-    def _calculate_reward(self, target, pos, vel):
-        reward = - (np.power(np.subtract(target, pos),2).mean() + 0.1*vel.mean())
+    def _calculate_reward(self, target, pos, vel, action):
+        reward = - np.power(np.subtract(target, pos),2).mean() 
+        #+ 0.1*np.power(vel,2).mean() + 0.001*np.power(action,2).mean())
         return reward
     
     def _sim_callback(self, msg):
