@@ -10,7 +10,7 @@ from rclpy.qos import QoSProfile, QoSHistoryPolicy, QoSReliabilityPolicy, QoSDur
 
 from pr_3dof_msgs.msg import PRState
 from pr_3dof_msgs.msg import PRArrayH
-from geometry_msgs.msg import Quaternion
+from geometry_msgs.msg import Point
 from std_msgs.msg import Bool, String
 
 from time import sleep
@@ -55,9 +55,9 @@ class PR3DOFEnv(gym.Env):
         self.node = rclpy.create_node("pr_env")
 
         #initialize variables
-        self.target_position = np.array([0.830578, 0.847096, 0.831132])
+        self.target_position = np.array([0.4854255416633526, -0.1666953653732201, 0.2495862280273856])
 
-        first_position = np.array([0.679005, 0.708169, 0.684298])
+        first_position = np.array([0.1203, 0.2731, 0.2425])
         first_velocity = np.array([0.0, 0.0, 0.0])
         self.first_obs = np.concatenate((first_position, first_velocity, (self.target_position-first_position)), axis=0)
 
@@ -89,7 +89,7 @@ class PR3DOFEnv(gym.Env):
         sim_qos.durability = QoSDurabilityPolicy.VOLATILE
 
         self.subscription_sim_ = self.node.create_subscription(
-            Quaternion,
+            Point,
             "position_sim",
             self._sim_callback,
             sim_qos)
