@@ -21,8 +21,8 @@ class PR3DOFEnv(gym.Env):
     def __init__(self):
         print("Env initialized")
         #define spaces
-        self.max_v = 9.5
-        self.min_v = -9.5
+        self.max_v = 1.0
+        self.min_v = -1.0
         self.max_obs = 2.0
         self.min_obs = -2.0
 
@@ -55,9 +55,9 @@ class PR3DOFEnv(gym.Env):
         self.node = rclpy.create_node("pr_env")
 
         #initialize variables
-        self.target_position = np.array([0.4854255416633526, -0.1666953653732201, 0.2495862280273856])
+        self.target_position = np.array([0.2312, 0.3755, 0.1255])
 
-        first_position = np.array([0.1203, 0.2731, 0.2425])
+        first_position = np.array([0.1337, 0.3034, 0.2694])
         first_velocity = np.array([0.0, 0.0, 0.0])
         self.first_obs = np.concatenate((first_position, first_velocity, (self.target_position-first_position)), axis=0)
 
