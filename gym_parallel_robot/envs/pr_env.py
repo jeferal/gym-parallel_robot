@@ -126,21 +126,6 @@ class PREnv(gym.Env):
         if self.status == 'all_clear' or self.status == 'error_sim':
             done = True
             print("Done = True from simulation")
-        
-        #TODO Stop when obs > 1.99
-        """
-        if len(pos[pos>1.99]) > 0 or len(pos[pos<-1.99]) > 0:
-            done = True
-            print("Done = True from overflow")
-            self.status = 'limit_overflow'
-            reward = - self.a*(1+np.exp(-self.time/self.b))
-            while self.status != 'error_sim':
-                print('waiting for finishing simulation')
-                rclpy.spin_once(self.node)
-                if self.status == 'all_clear':
-                    break
-            self.status = 'done'
-        """
 
         if self.status == 'error_sim' or self.status == 'limit_overflow':
             print('Reward crash: ')
